@@ -1,5 +1,9 @@
-import os
-from typing import Optional
+# src/tools/rag.py
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional, List
+
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -9,36 +13,58 @@ from ..config import settings
 
 _VECTORSTORE: Optional[FAISS] = None
 
+
+def _load_kb_documents(kb_dir: str) -> List:
+    kb_path = Path(kb_dir)
+    if not kb_path.exists():
+        raise FileNotFoundError(f"KB_DIR not found: {kb_dir}")
+
+    docs = []
+    for path in kb_path.glob("*.txt"):
+        loader = TextLoader(str(path), encoding="utf-8")
+        docs.extend(loader.load())
+
+    if not docs:
+        raise ValueError(f"No .txt files found in KB_DIR: {kb_dir}")
+
+    return docs
+
+
 def build_or_load_faiss() -> FAISS:
+    """
+    Loads FAISS index if (index.faiss AND index.pkl) exist.
+    Otherwise builds from KB text files and saves locally.
+    """
     global _VECTORSTORE
     if _VECTORSTORE is not None:
         return _VECTORSTORE
 
-    # If index exists, load it
-    if os.path.isdir(settings.faiss_index_dir) and os.listdir(settings.faiss_index_dir):
+    index_dir = Path(settings.faiss_index_dir)
+    faiss_file = index_dir / "index.faiss"
+    pkl_file = index_dir / "index.pkl"
+
+    embeddings = OpenAIEmbeddings(api_key=settings.openai_api_key)
+
+    # ✅ Only load if BOTH files exist
+    if faiss_file.exists() and pkl_file.exists():
         _VECTORSTORE = FAISS.load_local(
-            settings.faiss_index_dir,
-            embeddings=OpenAIEmbeddings(api_key=settings.openai_api_key),
+            str(index_dir),
+            embeddings=embeddings,
             allow_dangerous_deserialization=True,
         )
         return _VECTORSTORE
 
-    # Else build from KB text files
-    docs = []
-    for fname in os.listdir(settings.kb_dir):
-        if fname.endswith(".txt"):
-            path = os.path.join(settings.kb_dir, fname)
-            loader = TextLoader(path, encoding="utf-8")
-            docs.extend(loader.load())
+    # ✅ Otherwise build
+    docs = _load_kb_documents(settings.kb_dir)
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
     chunks = splitter.split_documents(docs)
 
-    embeddings = OpenAIEmbeddings(api_key=settings.openai_api_key)
     _VECTORSTORE = FAISS.from_documents(chunks, embeddings)
-    os.makedirs(settings.faiss_index_dir, exist_ok=True)
-    _VECTORSTORE.save_local(settings.faiss_index_dir)
+    index_dir.mkdir(parents=True, exist_ok=True)
+    _VECTORSTORE.save_local(str(index_dir))
     return _VECTORSTORE
+
 
 def get_rag_retriever():
     vs = build_or_load_faiss()

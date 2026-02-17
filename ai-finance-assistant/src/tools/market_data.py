@@ -1,38 +1,115 @@
-from typing import Dict, Any, List
+# src/tools/market_data.py
+from typing import Dict, Any, List, Optional
+import time
 import yfinance as yf
 
 from .cache import SQLiteTTLCache
 
+
+def _safe_float(x) -> Optional[float]:
+    try:
+        return float(x) if x is not None else None
+    except Exception:
+        return None
+
+
+def _get_last_from_history(ticker: yf.Ticker) -> Dict[str, Optional[float]]:
+    """
+    Most reliable path for "price now":
+    - Try 1-minute candles for the last trading session
+    - Fallback to daily close
+    Returns: {"last_price": ..., "previous_close": ...}
+    """
+    # 1) Try intraday 1m (best for current/most recent price)
+    try:
+        intraday = ticker.history(period="1d", interval="1m")
+        if intraday is not None and not intraday.empty:
+            close_series = intraday["Close"].dropna()
+            if len(close_series) >= 1:
+                last_price = _safe_float(close_series.iloc[-1])
+                # previous close from the prior minute if available
+                prev_close = _safe_float(close_series.iloc[-2]) if len(close_series) >= 2 else None
+                return {"last_price": last_price, "previous_close": prev_close}
+    except Exception:
+        pass
+
+    # 2) Fallback to daily history
+    try:
+        daily = ticker.history(period="5d", interval="1d")
+        if daily is not None and not daily.empty:
+            close_series = daily["Close"].dropna()
+            if len(close_series) >= 1:
+                last_price = _safe_float(close_series.iloc[-1])
+                prev_close = _safe_float(close_series.iloc[-2]) if len(close_series) >= 2 else None
+                return {"last_price": last_price, "previous_close": prev_close}
+    except Exception:
+        pass
+
+    return {"last_price": None, "previous_close": None}
+
+
 def fetch_quotes(symbols: List[str], cache: SQLiteTTLCache, ttl_seconds: int) -> Dict[str, Any]:
     results: Dict[str, Any] = {}
 
-    for sym in symbols:
-        key = f"quote:{sym.upper()}"
+    for raw in symbols:
+        sym = raw.upper().strip()
+        if not sym:
+            continue
+
+        key = f"quote:{sym}"
         cached = cache.get(key)
         if cached:
-            cached["source"] = "cache"
-            results[sym.upper()] = cached
+            cached["cache_hit"] = True
+            results[sym] = cached
             continue
+
+        payload = {
+            "symbol": sym,
+            "last_price": None,
+            "previous_close": None,
+            "market_cap": None,
+            "currency": None,
+            "source": "yfinance",
+            "cache_hit": False,
+            "fetched_at": int(time.time()),
+        }
 
         try:
             t = yf.Ticker(sym)
-            info = t.fast_info  # fast + reliable for many tickers
-            payload = {
-                "symbol": sym.upper(),
-                "last_price": float(info.get("last_price")) if info.get("last_price") is not None else None,
-                "previous_close": float(info.get("previous_close")) if info.get("previous_close") is not None else None,
-                "market_cap": float(info.get("market_cap")) if info.get("market_cap") is not None else None,
-                "currency": info.get("currency"),
-                "source": "yfinance",
-            }
+
+            # Try fast_info (sometimes works)
+            try:
+                fi = getattr(t, "fast_info", None)
+                if fi:
+                    payload["last_price"] = _safe_float(fi.get("last_price"))
+                    payload["previous_close"] = _safe_float(fi.get("previous_close"))
+                    payload["market_cap"] = _safe_float(fi.get("market_cap"))
+                    payload["currency"] = fi.get("currency")
+            except Exception:
+                pass
+
+            # If still missing, use history (more reliable)
+            if payload["last_price"] is None:
+                hist_vals = _get_last_from_history(t)
+                payload["last_price"] = hist_vals["last_price"]
+                # only set previous_close if not already present
+                if payload["previous_close"] is None:
+                    payload["previous_close"] = hist_vals["previous_close"]
+
+            # Final validation
+            if payload["last_price"] is None:
+                raise ValueError("No price returned from Yahoo Finance (may be rate-limited or blocked).")
+
             cache.set(key, payload, ttl_seconds)
-            results[sym.upper()] = payload
+            results[sym] = payload
+
         except Exception as e:
-            # fallback: cached if exists (even if expired is not available here), otherwise error
-            results[sym.upper()] = {
-                "symbol": sym.upper(),
+            results[sym] = {
+                "symbol": sym,
                 "error": f"Failed to fetch quote: {e}",
                 "source": "error",
+                "cache_hit": False,
+                "fetched_at": int(time.time()),
             }
 
     return results

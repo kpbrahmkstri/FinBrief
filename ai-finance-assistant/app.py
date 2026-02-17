@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from src.graph import build_graph
 
-st.set_page_config(page_title="AI Finance Assistant", layout="wide")
+st.set_page_config(page_title="FinBrief", layout="wide")
 
 GRAPH = build_graph()
 
@@ -18,7 +18,7 @@ if "portfolio" not in st.session_state:
 if "last_state" not in st.session_state:
     st.session_state.last_state = {}
 
-st.title("AI Finance Assistant (Multi-Agent + LangGraph)")
+st.title("FinBrief- AI Finance Assistant")
 
 tab_chat, tab_portfolio, tab_market, tab_goals, tab_news = st.tabs(
     ["Chat", "Portfolio", "Market", "Goals", "News"]
@@ -49,7 +49,10 @@ with tab_chat:
 
     st.markdown("### Conversation Memory (last 6)")
     for m in st.session_state.memory[-6:]:
-        st.write(f"**{m['role']}**: {m['content'][:180]}...")
+        if m["role"] == "user":
+            st.markdown(f"**🧑 You:** {m['content']}")
+        else:
+            st.markdown(f"**🤖 Assistant:** {m['content']}")
 
 with tab_portfolio:
     st.subheader("Portfolio")
@@ -71,6 +74,7 @@ with tab_portfolio:
 
             # Allocation chart
             fig = plt.figure()
+            fig = plt.figure(figsize=(4, 4))
             labels = pos["symbol"].tolist()
             sizes = pos["allocation_pct"].tolist()
             plt.pie(sizes, labels=labels, autopct="%1.1f%%")
