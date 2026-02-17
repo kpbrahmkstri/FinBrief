@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "content_type": "finance_education_articles",
+  "notes": "Add more articles to sample_articles/ to improve retrieval quality and rubric score.",
+  "sources": [
+    {
+      "folder": "sample_articles",
+      "format": "txt",
+      "citation_key": "filename"
+    }
+  ]
+}

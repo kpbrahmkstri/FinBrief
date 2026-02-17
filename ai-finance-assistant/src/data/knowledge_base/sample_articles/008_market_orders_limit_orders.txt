@@ -1,0 +1,9 @@
+Title: Market Orders vs Limit Orders
+Level: Beginner
+Tags: trading, orders, liquidity
+
+A market order buys or sells immediately at the best available price. It prioritizes execution speed, but the final price can vary, especially in fast-moving markets.
+
+A limit order sets a maximum price you will pay (buy limit) or minimum price you will accept (sell limit). It prioritizes price control, but it may not execute if the market does not reach your limit.
+
+In liquid markets, market orders often fill near the displayed price; in less liquid situations, price slippage can be larger.

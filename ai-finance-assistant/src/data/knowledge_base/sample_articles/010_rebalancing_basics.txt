@@ -1,0 +1,12 @@
+Title: Rebalancing Basics
+Level: Beginner
+Tags: rebalancing, allocation, risk
+
+Rebalancing means adjusting your portfolio back toward a target allocation. Over time, winners can grow to dominate your portfolio, increasing concentration risk.
+
+Example:
+- Target: 60% stocks, 40% bonds
+- If stocks outperform, your portfolio may drift to 70/30
+- Rebalancing might involve selling some stocks or buying bonds to move back toward 60/40
+
+Rebalancing is a risk management behavior. It does not guarantee better returns, but it can help keep risk aligned with your plan.

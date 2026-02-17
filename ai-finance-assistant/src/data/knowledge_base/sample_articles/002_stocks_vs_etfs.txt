@@ -1,0 +1,13 @@
+Title: Stocks vs ETFs
+Level: Beginner
+Tags: stocks, etf, index, diversification
+
+A stock represents partial ownership in a single company. When you buy a stock, your outcome is highly tied to that company’s performance and investor expectations.
+
+An ETF (Exchange-Traded Fund) is a basket of assets that trades like a stock. Many ETFs track an index, such as a large-cap index. Because ETFs can hold many securities, they can offer diversification with a single purchase.
+
+Common differences:
+- Concentration: a single stock is concentrated; an ETF is usually diversified.
+- Risk: single stocks can be more volatile; diversified ETFs can smooth outcomes.
+- Fees: ETFs may charge an expense ratio (a small annual fee).
+- Use case: ETFs are often used for broad exposure; stocks for targeted bets.

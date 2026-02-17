@@ -1,0 +1,11 @@
+Title: Dividends and Capital Gains
+Level: Beginner
+Tags: dividends, capital gains, taxes
+
+Dividends are cash payments some companies distribute to shareholders. Capital gains occur when you sell an investment for more than you paid.
+
+Two ways investors can benefit:
+- Income: dividends
+- Growth: price appreciation (capital gains)
+
+Tax treatment can vary depending on country, holding period, and account type. The key concept is that returns can come from multiple sources, not just price changes.
