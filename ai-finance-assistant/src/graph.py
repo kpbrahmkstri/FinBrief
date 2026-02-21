@@ -164,9 +164,16 @@ def node_news(state: FinanceState) -> FinanceState:
     return state
 
 def node_tax(state: FinanceState) -> FinanceState:
-    res = tax_education_answer(state.get("user_message", "") or "")
-    state["tax_answer"] = res["answer"]
-    state["tax_citations"] = res["citations"]
+    from .agents.tax_agent import tax_qa
+
+    user_message = state.get("user_message", "") or ""
+    res = tax_qa(user_message)
+
+    state["tax_answer"] = res.get("answer", "")
+    state["tax_citations"] = res.get("citations", [])
+
+    # show this answer to the UI
+    state["final_answer"] = state["tax_answer"]
     return state
 
 def node_compose(state: FinanceState) -> FinanceState:

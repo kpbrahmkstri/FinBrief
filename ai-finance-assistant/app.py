@@ -61,6 +61,15 @@ with tab_chat:
         )
         st.markdown(out.get("final_answer", ""))
 
+        tax_cites = out.get("tax_citations", []) or []
+        if tax_cites:
+            st.markdown("**Sources used (Tax KB):**")
+            for c in tax_cites:
+                st.write(
+                    f"- [{c.get('id','?')}] "
+                    f"{c.get('title','Untitled')} — {c.get('source','')}"
+                )
+
     st.markdown("### Conversation Memory (last 6)")
     for m in st.session_state.memory[-6:]:
         if m["role"] == "user":
