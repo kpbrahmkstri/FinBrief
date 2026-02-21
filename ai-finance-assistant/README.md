@@ -143,8 +143,10 @@ The system includes a curated financial education corpus:
 - Efficient similarity search retrieval
 
 Rebuild index:
-
+```bash
 python -m src.scripts.build_kb
+```
+
 🧭 Routing Logic
 
 The system uses intent-based routing to dispatch user queries to the appropriate agent.
@@ -152,11 +154,17 @@ The system uses intent-based routing to dispatch user queries to the appropriate
 Examples:
 
 Intent	                            Routed To
+
 “What is an ETF?”	            Finance Q&A Agent
+
 “What is the wash sale rule?”	Tax Agent
+
 “Get price for AAPL”	        Market Agent
+
 “Analyze my portfolio”	        Portfolio Agent
+
 “Help me plan retirement”	    Goal Agent
+
 “Summarize latest macro news”	News Agent
 
 
@@ -174,14 +182,26 @@ Intent	                            Routed To
 - pandas
 
 🚀 How To Run
+
 1️⃣ Install dependencies
+```bash
 pip install -r requirements.txt
+```
+
 2️⃣ Set environment variables (.env)
+```bash
 OPENAI_API_KEY=your_key_here
+```
+
 3️⃣ Build Knowledge Base
+```bash
 python -m src.scripts.build_kb
+```
+
 4️⃣ Run Application
+```bash
 streamlit run app.py
+```
 
 ## Setup
 
