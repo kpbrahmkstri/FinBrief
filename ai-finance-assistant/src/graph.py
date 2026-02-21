@@ -170,33 +170,29 @@ def node_compose(state: FinanceState) -> FinanceState:
         )
 
     # --- Market ---
-    market_data = state.get("market_data") or {}
-    if market_data:
-        parts.append("### 📈 Market Data")
-        for sym, q in market_data.items():
-            if not isinstance(q, dict):
-                continue
+    # Only show market summary when the user asked for market directly
+    # (prevents Market Data from cluttering Portfolio results)
+    if state.get("intent") in ("market",):
+        market_data = state.get("market_data") or {}
+        if market_data:
+            parts.append("### 📈 Market Data")
+            for sym, q in market_data.items():
+                if not isinstance(q, dict):
+                    continue
 
-            if "error" in q:
-                parts.append(f"- **{sym}**: ❌ {q['error']}")
-                continue
+                if "error" in q:
+                    parts.append(f"- **{sym}**: ❌ {q['error']}")
+                    continue
 
-            lp = q.get("last_price")
-            pc = q.get("previous_close")
-            src = q.get("source", "unknown")
-            ts = q.get("fetched_at")
+                lp = q.get("last_price")
+                pc = q.get("previous_close")
+                src = q.get("source", "unknown")
 
-            lp_str = f"{lp:.2f}" if isinstance(lp, (int, float)) else "N/A"
-            pc_str = f"{pc:.2f}" if isinstance(pc, (int, float)) else "N/A"
+                lp_str = f"{lp:.2f}" if isinstance(lp, (int, float)) else "N/A"
+                pc_str = f"{pc:.2f}" if isinstance(pc, (int, float)) else "N/A"
 
-            pct = q.get("pct_change")
-            pct_str = f"{pct:+.2f}%" if isinstance(pct, (int, float)) else "N/A"
-
-            parts.append(
-                f"- **{sym}**: last=${lp_str} | prev_close=${pc_str} | change={pct_str} "
-                f"(source={src})"
-            )
-        
+                parts.append(f"- **{sym}**: ${lp_str} (prev close: ${pc_str}, source: {src})")
+            
     # --- Portfolio ---
     if state.get("portfolio_metrics"):
         pm = state["portfolio_metrics"]

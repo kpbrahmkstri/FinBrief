@@ -63,25 +63,66 @@ with tab_portfolio:
     st.session_state.portfolio = edited.to_dict(orient="records")
 
     if st.button("Analyze Portfolio"):
-        out = run_graph("Analyze my portfolio allocation and diversification.", extra_state={
-            "portfolio_input": st.session_state.portfolio,
-            "market_request": {"symbols": [x["symbol"] for x in st.session_state.portfolio]},
-        })
-        pm = out.get("portfolio_metrics")
+        out = run_graph(
+            "Analyze my portfolio allocation and diversification.",
+            extra_state={
+                "portfolio_input": st.session_state.portfolio,
+                "market_request": {"symbols": [x["symbol"] for x in st.session_state.portfolio]},
+            },
+        )
+
+        pm = out.get("portfolio_metrics", {})
         st.markdown(out.get("final_answer", ""))
 
         if pm and pm.get("positions"):
             pos = pd.DataFrame(pm["positions"])
-            st.dataframe(pos)
+            st.dataframe(pos, use_container_width=True)
 
-            # Allocation chart
-            fig = plt.figure()
-            fig = plt.figure(figsize=(4, 4))
+            # --- Donut Allocation Chart (cleaner than pie) ---
             labels = pos["symbol"].tolist()
             sizes = pos["allocation_pct"].tolist()
-            plt.pie(sizes, labels=labels, autopct="%1.1f%%")
+
+            fig = plt.figure(figsize=(3, 3))
+            wedges, texts, autotexts = plt.pie(
+                sizes,
+                labels=labels,
+                autopct="%1.1f%%",
+                pctdistance=0.78,
+                labeldistance=1.05,
+            )
+            centre_circle = plt.Circle((0, 0), 0.55, fc="white")
+            fig.gca().add_artist(centre_circle)
             plt.title("Allocation (%)")
+            plt.tight_layout()
             st.pyplot(fig)
+
+            # --- Concentration metrics ---
+            hhi = pm.get("hhi")
+            grade = pm.get("diversification_grade")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.metric("Concentration (HHI)", f"{hhi:.3f}" if isinstance(hhi, (int, float)) else "N/A")
+            with c2:
+                st.metric("Diversification Grade", grade or "N/A")
+
+            # --- Top holdings & flags ---
+            flags = pm.get("concentration_flags", {}) or {}
+            top_pos = flags.get("top_positions", [])
+
+            if top_pos:
+                st.subheader("Top Holdings")
+                for x in top_pos:
+                    st.write(f"- **{x['symbol']}**: {x['allocation_pct']:.1f}%")
+
+            # --- Recommendations ---
+            recs = pm.get("recommendations", []) or []
+            if recs:
+                st.subheader("Education-only Suggestions")
+                for r in recs:
+                    st.write(f"- {r}")    
+
+
 
 with tab_market:
     st.subheader("Market")
