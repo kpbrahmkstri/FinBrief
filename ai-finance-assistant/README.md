@@ -13,6 +13,7 @@ Built using:
 
 Although the UI contains 5 tabs for simplicity, the backend consists of 6 independent AI agents, orchestrated via a graph-based routing layer.
 
+```bash
 User Input
    ↓
 Intent Router (LangGraph)
@@ -22,6 +23,7 @@ Intent Router (LangGraph)
    ├── Portfolio Analysis Agent
    ├── Goal Planning Agent
    └── News Synthesizer Agent
+```
 
 Each agent has:
 
@@ -153,19 +155,19 @@ The system uses intent-based routing to dispatch user queries to the appropriate
 
 Examples:
 
-Intent	                            Routed To
+Intent	            ->                Routed To
 
-“What is an ETF?”	            Finance Q&A Agent
+“What is an ETF?”	  ->          Finance Q&A Agent
 
-“What is the wash sale rule?”	Tax Agent
+“What is the wash sale rule?” ->	Tax Agent
 
-“Get price for AAPL”	        Market Agent
+“Get price for AAPL”	   ->     Market Agent
 
-“Analyze my portfolio”	        Portfolio Agent
+“Analyze my portfolio”	     ->   Portfolio Agent
 
-“Help me plan retirement”	    Goal Agent
+“Help me plan retirement”	  ->  Goal Agent
 
-“Summarize latest macro news”	News Agent
+“Summarize latest macro news”	-> News Agent
 
 
 🛠 Tech Stack
