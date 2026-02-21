@@ -8,6 +8,22 @@ from src.graph import build_graph
 
 st.set_page_config(page_title="FinBrief", layout="wide")
 
+st.markdown("""
+<style>
+div[data-baseweb="tab-list"] {
+    display: flex;
+    justify-content: space-between;
+}
+
+div[data-baseweb="tab"] {
+    flex-grow: 1;
+    text-align: center;
+    padding: 12px 0px;
+    font-size: 16px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 GRAPH = build_graph()
 
 # Session state
