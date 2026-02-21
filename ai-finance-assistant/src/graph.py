@@ -116,12 +116,29 @@ def node_portfolio(state: FinanceState) -> FinanceState:
 
 def node_goals(state: FinanceState) -> FinanceState:
     req = state.get("goals_request") or {}
+
     target = float(req.get("target", 50000))
     monthly = float(req.get("monthly", 300))
     years = float(req.get("years", 10))
+    current = float(req.get("current", 0))
+    expected_return = float(req.get("expected_return", 0.06))
+    inflation = float(req.get("inflation", 0.02))
 
-    state["goals_request"] = {"target": target, "monthly": monthly, "years": years}
-    state["goals_projection"] = goal_planning(target, monthly, years)
+    goal_input = {
+        "goal_amount": target,
+        "monthly_contribution": monthly,
+        "years": years,
+        "current_savings": current,
+        "expected_return": expected_return,
+        "inflation_rate": inflation,
+    }
+
+    result = goal_planning(goal_input)
+
+    state["goals_request"] = goal_input
+    state["goals_projection"] = result.get("goal_metrics", {})
+    state["final_answer"] = result.get("narrative", "")
+
     return state
 
 

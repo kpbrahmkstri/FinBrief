@@ -205,30 +205,78 @@ with tab_market:
 
 with tab_goals:
     st.subheader("Goals")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        target = st.number_input("Target amount ($)", min_value=1000, value=50000, step=1000)
-    with col2:
-        monthly = st.number_input("Monthly contribution ($)", min_value=10, value=300, step=10)
-    with col3:
+
+    row1 = st.columns(3)
+    with row1[0]:
+        target = st.number_input("Target amount ($)", min_value=1_000, value=50_000, step=1_000)
+    with row1[1]:
+        current = st.number_input("Current savings ($)", min_value=0, value=5_000, step=500)
+    with row1[2]:
         years = st.number_input("Time horizon (years)", min_value=1, value=10, step=1)
 
+    row2 = st.columns(3)
+    with row2[0]:
+        monthly = st.number_input("Monthly contribution ($)", min_value=0, value=300, step=10)
+    with row2[1]:
+        exp_return = st.slider("Expected annual return (%)", 0.0, 15.0, 6.0) / 100.0
+    with row2[2]:
+        inflation = st.slider("Inflation rate (%)", 0.0, 10.0, 2.0) / 100.0
+
     if st.button("Run Projection"):
-        out = run_graph("Help me plan this financial goal.", extra_state={
-            "goals_request": {"target": target, "monthly": monthly, "years": years}
-        })
-        gp = out.get("goals_projection", {})
+        out = run_graph(
+            "Help me plan this financial goal.",
+            extra_state={
+                "goals_request": {
+                    "target": target,
+                    "monthly": monthly,
+                    "years": years,
+                    "current": current,
+                    "expected_return": exp_return,
+                    "inflation": inflation,
+                }
+            },
+        )
+
+        gp = out.get("goals_projection", {}) or {}
         st.markdown(out.get("final_answer", ""))
 
-        # Plot moderate scenario
-        if gp and "scenarios" in gp:
-            balances = gp["scenarios"]["moderate"]["balances"]
-            fig = plt.figure()
-            plt.plot(list(range(1, len(balances)+1)), balances)
-            plt.title("Moderate Projection Balance Over Time")
-            plt.xlabel("Month")
-            plt.ylabel("Balance ($)")
-            st.pyplot(fig)
+        # Summary cards
+        c1, c2, c3 = st.columns(3)
+        ia = gp.get("inflation_adjusted_target")
+        fv = gp.get("future_value_current")
+        rm = gp.get("required_monthly_contribution")
+
+        with c1:
+            st.metric("Inflation-adjusted target", f"${ia:,.0f}" if isinstance(ia, (int, float)) else "N/A")
+        with c2:
+            st.metric("Projected value of current savings", f"${fv:,.0f}" if isinstance(fv, (int, float)) else "N/A")
+        with c3:
+            st.metric("Required monthly contribution", f"${rm:,.0f}" if isinstance(rm, (int, float)) else "N/A")
+
+        gap = gp.get("gap")
+        if isinstance(gap, (int, float)):
+            if gap > 0:
+                st.warning(f"You are short by about **${gap:,.0f}** under these assumptions.")
+            else:
+                st.success("You appear on track under these assumptions.")
+
+        # Plot: Compounded monthly growth curve (no scenario dependency)
+        months = int(years * 12)
+        monthly_rate = exp_return / 12.0
+
+        balances = []
+        bal = float(current)
+        for _ in range(months):
+            bal = bal * (1 + monthly_rate) + float(monthly)
+            balances.append(bal)
+
+        fig = plt.figure(figsize=(6, 3))
+        plt.plot(range(1, months + 1), balances)
+        plt.title("Projected Growth Over Time (Compounded)")
+        plt.xlabel("Month")
+        plt.ylabel("Balance ($)")
+        plt.tight_layout()
+        st.pyplot(fig)
 
 with tab_news:
     st.subheader("News")
