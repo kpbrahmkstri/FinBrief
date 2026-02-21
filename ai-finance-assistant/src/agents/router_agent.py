@@ -1,6 +1,14 @@
 from typing import Dict, Any, List
 import re
 
+TAX_KEYWORDS = [
+    "tax", "taxes", "capital gains", "short-term", "long-term",
+    "wash sale", "tax-loss", "harvesting", "1099", "w-2", "w2",
+    "deduction", "deductions", "credits", "tax credit",
+    "ira", "roth", "traditional ira", "401k", "403b", "hsa", "fsa",
+    "brokerage account tax", "dividend tax", "qualified dividend",
+]
+
 def classify_intent(user_message: str) -> Dict[str, Any]:
     t = user_message.lower()
 
@@ -13,8 +21,11 @@ def classify_intent(user_message: str) -> Dict[str, Any]:
         intents.append("goals")
     if any(k in t for k in ["news", "headline", "what happened today", "latest"]):
         intents.append("news")
+    if any(k in t for k in TAX_KEYWORDS):
+        intents.append("tax")
     if any(k in t for k in ["what is", "explain", "difference between", "how does", "define"]):
         intents.append("qa")
+
 
     # if no obvious, default to QA
     if not intents:

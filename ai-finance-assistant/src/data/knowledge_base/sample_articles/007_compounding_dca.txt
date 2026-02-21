@@ -1,9 +1,0 @@
-Title: Compounding and Dollar-Cost Averaging
-Level: Beginner
-Tags: compounding, contributions, DCA
-
-Compounding is when returns generate additional returns. If you invest and earn a return, next period’s return applies to a larger base.
-
-Dollar-cost averaging (DCA) is investing a fixed amount on a regular schedule (e.g., monthly). DCA can reduce the impact of buying all at once at a market peak, and it helps build consistent habits.
-
-Important note: DCA does not guarantee profit, but it can reduce timing anxiety and create disciplined progress toward a goal.

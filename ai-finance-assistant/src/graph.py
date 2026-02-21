@@ -13,6 +13,7 @@ from .agents.goal_agent import goal_planning
 from .agents.news_agent import summarize_news
 from .agents.memory_agent import update_profile, append_memory
 from .agents.safety_agent import apply_guardrail
+from .agents.tax_agent import tax_education_answer
 
 
 # ---------------------------
@@ -132,6 +133,11 @@ def node_news(state: FinanceState) -> FinanceState:
     state["news_summary"] = summarize_news(topic)
     return state
 
+def node_tax(state: FinanceState) -> FinanceState:
+    res = tax_education_answer(state.get("user_message", "") or "")
+    state["tax_answer"] = res["answer"]
+    state["tax_citations"] = res["citations"]
+    return state
 
 def node_compose(state: FinanceState) -> FinanceState:
     """
@@ -151,6 +157,17 @@ def node_compose(state: FinanceState) -> FinanceState:
                 "**Sources used (KB):** " +
                 ", ".join([f"[{c['id']}] {c['source']}" for c in cits])
             )
+
+        # --- Tax Education ---
+    if state.get("tax_answer"):
+        parts.append("### 🧾 Tax Education\n" + state["tax_answer"])
+
+        tcits = state.get("tax_citations") or []
+        if tcits:
+            parts.append(
+            "**Tax sources used (KB):** " +
+            ", ".join([f"[{c['id']}] {c['source']}" for c in tcits])
+        )
 
     # --- Market ---
     market_data = state.get("market_data") or {}
@@ -210,6 +227,8 @@ def node_compose(state: FinanceState) -> FinanceState:
     if not answer:
         answer = "I can help with finance education, portfolio basics, market quotes, goals, and news. What would you like to do?"
 
+
+
     # guardrails (education-only)
     answer = apply_guardrail(state.get("user_message", "") or "", answer)
     state["final_answer"] = answer
@@ -240,6 +259,8 @@ def route_next(state: FinanceState) -> str:
         return "goals"
     if intent == "news":
         return "news"
+    if intent == "tax":
+        return "tax"
     if intent == "mixed":
         # simplest deterministic behavior: start with RAG; you can extend later
         return "rag"
@@ -270,6 +291,7 @@ def build_graph():
     g.add_node("goals", node_goals)
     g.add_node("news", node_news)
     g.add_node("compose", node_compose)
+    g.add_node("tax", node_tax)
 
     # Entry
     g.set_entry_point("memory_update")
@@ -282,6 +304,7 @@ def build_graph():
         "market_then_portfolio": "market_then_portfolio",
         "goals": "goals",
         "news": "news",
+        "tax": "tax",
     })
 
     # Paths (deterministic)
@@ -294,6 +317,7 @@ def build_graph():
 
     g.add_edge("goals", "compose")
     g.add_edge("news", "compose")
+    g.add_edge("tax", "compose")
 
     # End
     g.add_edge("compose", END)

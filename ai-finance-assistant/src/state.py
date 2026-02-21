@@ -1,13 +1,15 @@
 # src/state.py
 from typing import Any, Dict, List, Optional, TypedDict, Literal
 
+IntentType = Literal["qa", "portfolio", "market", "goals", "news", "tax", "mixed", "unknown"]
+
 class FinanceState(TypedDict, total=False):
     # raw user input
     user_message: str
 
     # router outputs
-    intent: Literal["qa", "portfolio", "market", "goals", "news", "mixed", "unknown"]
-    sub_intents: List[Literal["qa", "portfolio", "market", "goals", "news", "mixed", "unknown"]]
+    intent: IntentType
+    sub_intents: List[IntentType]
     required_agents: List[str]
 
     # memory/profile
@@ -17,6 +19,9 @@ class FinanceState(TypedDict, total=False):
     # artifacts computed by agents
     rag_answer: Optional[str]
     rag_citations: Optional[List[Dict[str, str]]]
+
+    tax_answer: Optional[str]
+    tax_citations: Optional[List[Dict[str, str]]]
 
     portfolio_input: Optional[List[Dict[str, Any]]]
     portfolio_metrics: Optional[Dict[str, Any]]
