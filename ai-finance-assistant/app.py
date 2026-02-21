@@ -1,4 +1,6 @@
 import streamlit as st
+import os
+os.environ["STREAMLIT_FILE_WATCHER_TYPE"] = "none"
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -83,13 +85,82 @@ with tab_portfolio:
 
 with tab_market:
     st.subheader("Market")
+
     tickers = st.text_input("Tickers (comma-separated):", value="AAPL,MSFT")
+
     if st.button("Get Quotes"):
         symbols = [t.strip().upper() for t in tickers.split(",") if t.strip()]
-        out = run_graph(f"Get price quotes for {', '.join(symbols)}", extra_state={
-            "market_request": {"symbols": symbols}
-        })
+
+        out = run_graph(
+            f"Get price quotes for {', '.join(symbols)}",
+            extra_state={"market_request": {"symbols": symbols}}
+        )
+
+        # Print text summary
         st.markdown(out.get("final_answer", ""))
+
+        # Access structured market data
+        market_data = out.get("market_data", {})
+
+        import matplotlib.pyplot as plt
+
+        for sym, quote in market_data.items():
+
+            st.markdown(f"### {sym}")
+            #st.write("DEBUG keys:", list(quote.keys()))
+
+            if "error" in quote:
+                st.error(f"{sym}: {quote['error']}")
+                continue
+
+            last = quote.get("last_price")
+            prev = quote.get("previous_close")
+            pct = quote.get("pct_change")
+            hist = quote.get("history_5d", [])
+            hist_dates = quote.get("history_dates", [])
+
+            # Calculate pct_change if not provided but we have prices
+            if pct is None and last is not None and prev is not None and prev != 0:
+                pct = ((last - prev) / prev) * 100.0
+
+            # Nice formatted metrics
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric("Last Price", f"${last:.2f}" if last else "N/A")
+
+            with col2:
+                st.metric("Prev Close", f"${prev:.2f}" if prev else "N/A")
+
+            with col3:
+                if pct is not None:
+                    st.metric("Change", f"{pct:+.2f}%", delta=f"{pct:+.2f}%")
+                else:
+                    st.metric("Change", "N/A")
+
+            # Sparkline chart
+            if hist and len(hist) >= 2:
+                fig = plt.figure(figsize=(8, 4))
+                plt.plot(hist, marker='o', linewidth=2, markersize=8)
+                
+                # Add price labels at each point
+                for i, price in enumerate(hist):
+                    plt.text(i, price, f'${price:.2f}', ha='center', va='bottom', fontsize=9)
+                
+                plt.title(f"{sym} - Last 5 Closes", fontsize=12)
+                plt.xlabel("Date", fontsize=10)
+                plt.ylabel("Price ($)", fontsize=10)
+                
+                # Use actual dates if available, otherwise use day numbers
+                if hist_dates and len(hist_dates) == len(hist):
+                    plt.xticks(range(len(hist)), hist_dates, rotation=45)
+                else:
+                    plt.xticks(range(len(hist)), [f"Day {i+1}" for i in range(len(hist))])
+                
+                plt.grid(True, alpha=0.3)
+                plt.tight_layout()
+                st.pyplot(fig)
+    
 
 with tab_goals:
     st.subheader("Goals")

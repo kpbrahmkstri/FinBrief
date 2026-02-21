@@ -189,9 +189,12 @@ def node_compose(state: FinanceState) -> FinanceState:
             lp_str = f"{lp:.2f}" if isinstance(lp, (int, float)) else "N/A"
             pc_str = f"{pc:.2f}" if isinstance(pc, (int, float)) else "N/A"
 
+            pct = q.get("pct_change")
+            pct_str = f"{pct:+.2f}%" if isinstance(pct, (int, float)) else "N/A"
+
             parts.append(
-                f"- **{sym}**: last=${lp_str} | prev_close=${pc_str} "
-                f"(source={src}, fetched_at={ts})"
+                f"- **{sym}**: last=${lp_str} | prev_close=${pc_str} | change={pct_str} "
+                f"(source={src})"
             )
         
     # --- Portfolio ---

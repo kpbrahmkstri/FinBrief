@@ -12,6 +12,30 @@ def _safe_float(x) -> Optional[float]:
     except Exception:
         return None
 
+def _get_daily_closes(ticker: yf.Ticker, days: int = 5):
+    try:
+        daily = ticker.history(period=f"{days}d", interval="1d")
+        if daily is None or daily.empty:
+            return []
+        closes = daily["Close"].dropna().tolist()
+        return [float(x) for x in closes][-days:]
+    except Exception:
+        return []
+
+def _get_daily_closes_with_dates(ticker: yf.Ticker, days: int = 5):
+    try:
+        daily = ticker.history(period=f"{days}d", interval="1d")
+        if daily is None or daily.empty:
+            return {"dates": [], "prices": []}
+        daily = daily[daily["Close"].notna()]
+        closes = daily["Close"].tolist()
+        dates = daily.index.strftime("%Y-%m-%d").tolist()
+        return {
+            "dates": dates[-days:],
+            "prices": [float(x) for x in closes][-days:]
+        }
+    except Exception:
+        return {"dates": [], "prices": []}
 
 def _get_last_from_history(ticker: yf.Ticker) -> Dict[str, Optional[float]]:
     """
@@ -85,6 +109,25 @@ def fetch_quotes(symbols: List[str], cache: SQLiteTTLCache, ttl_seconds: int) ->
                     payload["previous_close"] = _safe_float(fi.get("previous_close"))
                     payload["market_cap"] = _safe_float(fi.get("market_cap"))
                     payload["currency"] = fi.get("currency")
+                    history_data = _get_daily_closes_with_dates(t, days=5)
+                    payload["history_5d"] = history_data.get("prices", [])
+                    payload["history_dates"] = history_data.get("dates", [])
+
+                    # percent change
+                    lp = payload.get("last_price")
+                    pc = payload.get("previous_close")
+
+                    # If previous_close missing, try to infer from daily closes
+                    if pc is None:
+                        hist = payload.get("history_5d") or []
+                        if len(hist) >= 2:
+                            pc = hist[-2]
+                            payload["previous_close"] = pc
+
+                    if isinstance(lp, (int, float)) and isinstance(pc, (int, float)) and pc != 0:
+                        payload["pct_change"] = ((lp - pc) / pc) * 100.0
+                    else:
+                        payload["pct_change"] = None
             except Exception:
                 pass
 
