@@ -146,10 +146,21 @@ def node_goals(state: FinanceState) -> FinanceState:
 
 def node_news(state: FinanceState) -> FinanceState:
     req = state.get("news_request") or {}
-    topic = req.get("topic", "markets")
+    topic = str(req.get("topic", "All"))
+    limit = int(req.get("limit", 10))
 
-    state["news_request"] = {"topic": topic}
-    state["news_summary"] = summarize_news(topic)
+    from .agents.news_agent import synthesize_news
+
+    res = synthesize_news(topic=topic, limit=limit)
+
+    state["news_summary"] = {
+        "topic": res.get("topic", topic),
+        "items": res.get("items", []),
+        "citations": res.get("citations", []),
+    }
+
+    # Put the synthesized narrative into final_answer
+    state["final_answer"] = res.get("summary", "")
     return state
 
 def node_tax(state: FinanceState) -> FinanceState:

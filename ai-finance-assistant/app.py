@@ -292,9 +292,31 @@ with tab_goals:
 
 with tab_news:
     st.subheader("News")
-    topic = st.text_input("News topic:", value="markets")
-    if st.button("Summarize News"):
-        out = run_graph(f"Summarize latest finance news about {topic}.", extra_state={
-            "news_request": {"topic": topic}
-        })
+
+    topic = st.selectbox(
+        "Topic",
+        ["All", "Markets", "Macro", "Tech", "Crypto", "ETFs", "Earnings"],
+        index=0,
+    )
+    limit = st.slider("Number of headlines", 5, 30, 10)
+
+    if st.button("Fetch & Summarize News"):
+        out = run_graph(
+            "Summarize the latest financial news.",
+            extra_state={"news_request": {"topic": topic, "limit": limit}},
+        )
+
         st.markdown(out.get("final_answer", ""))
+
+        ns = out.get("news_summary", {}) or {}
+        items = ns.get("items", []) or []
+
+        if items:
+            st.subheader("Sources")
+            for it in items:
+                title = it.get("title", "Untitled")
+                url = it.get("url", "")
+                published = it.get("published", "")
+                source = it.get("source", "")
+                # clickable
+                st.markdown(f"- [{title}]({url}) — {source} ({published})")
