@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 from langgraph.graph import StateGraph, END
+from matplotlib import category
 
 from .state import FinanceState
 from .agents.router_agent import classify_intent
@@ -44,7 +45,8 @@ def node_memory_update(state: FinanceState) -> FinanceState:
 
 
 def node_rag(state: FinanceState) -> FinanceState:
-    res = rag_qa(state.get("user_message", "") or "")
+    category = (state.get("profile") or {}).get("qa_category")  
+    res = rag_qa(state.get("user_message", "") or "", category=category)
     state["rag_answer"] = res["answer"]
     state["rag_citations"] = res["citations"]
     return state

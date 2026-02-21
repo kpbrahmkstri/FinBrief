@@ -41,12 +41,24 @@ def run_graph(user_message: str, extra_state: dict):
 
 with tab_chat:
     st.subheader("Chat")
-    user_message = st.text_input("Ask something (education-only):", placeholder="Explain diversification, or price of AAPL, or plan a goal...")
+
+    qa_category = st.selectbox(
+        "Q&A Category (optional)",
+        ["All", "Investing", "Tax", "Retirement", "Markets", "Risk", "Personal Finance"],
+        index=0
+    )
+    
+    user_message = st.text_input("Ask a finance question:", placeholder="Explain diversification, or price of AAPL, or plan a goal...")
 
     if st.button("Send", type="primary") and user_message:
-        out = run_graph(user_message, extra_state={
-            "portfolio_input": st.session_state.portfolio
-        })
+        out = run_graph(
+            user_message,
+            extra_state={
+                "profile": {
+                    "qa_category": qa_category
+                }
+            }
+        )
         st.markdown(out.get("final_answer", ""))
 
     st.markdown("### Conversation Memory (last 6)")

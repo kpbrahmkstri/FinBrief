@@ -13,22 +13,52 @@ from ..config import settings
 
 _VECTORSTORE: Optional[FAISS] = None
 
+def _parse_header_fields(text: str) -> tuple[str | None, str | None]:
+    """
+    Extracts:
+      Title: ...
+      Category: ...
+    from the top of each KB txt file.
+    """
+    title = None
+    category = None
+    for line in (text or "").splitlines()[:20]:
+        line_stripped = line.strip()
+        if line_stripped.lower().startswith("title:"):
+            title = line_stripped.split(":", 1)[1].strip()
+        if line_stripped.lower().startswith("category:"):
+            category = line_stripped.split(":", 1)[1].strip()
+    return title, category
+
 
 def _load_kb_documents(kb_dir: str) -> List:
+    from pathlib import Path
+    from langchain_core.documents import Document
+
     kb_path = Path(kb_dir)
     if not kb_path.exists():
         raise FileNotFoundError(f"KB_DIR not found: {kb_dir}")
 
     docs = []
     for path in kb_path.glob("*.txt"):
-        loader = TextLoader(str(path), encoding="utf-8")
-        docs.extend(loader.load())
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        title, category = _parse_header_fields(text)
+
+        docs.append(
+            Document(
+                page_content=text,
+                metadata={
+                    "source": path.name,          # filename
+                    "title": title or path.stem,  # fallback
+                    "category": category or "Uncategorized",
+                },
+            )
+        )
 
     if not docs:
         raise ValueError(f"No .txt files found in KB_DIR: {kb_dir}")
 
     return docs
-
 
 def build_or_load_faiss() -> FAISS:
     """
@@ -66,6 +96,8 @@ def build_or_load_faiss() -> FAISS:
     return _VECTORSTORE
 
 
-def get_rag_retriever():
+def get_rag_retriever(category: str | None = None):
     vs = build_or_load_faiss()
-    return vs.as_retriever(search_kwargs={"k": 4})
+    if category and category != "All":
+        return vs.as_retriever(search_kwargs={"k": 5, "filter": {"category": category}})
+    return vs.as_retriever(search_kwargs={"k": 5})
