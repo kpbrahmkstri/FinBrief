@@ -58,7 +58,7 @@ if "last_state" not in st.session_state:
 # Display logo and title
 col_logo, col_title = st.columns([2, 8])
 with col_logo:
-    st.image("../finbrief.png", width=160)
+    st.image("finbrief.png", width=160)
 with col_title:
     st.title("FinBrief - AI Finance Assistant")
 
