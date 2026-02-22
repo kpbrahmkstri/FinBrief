@@ -9,6 +9,11 @@ TAX_KEYWORDS = [
     "brokerage account tax", "dividend tax", "qualified dividend",
 ]
 
+NEWS_KEYWORDS = [
+    "news", "latest news", "headlines", "today news", "market news",
+    "what happened today", "breaking", "updates", "recap"
+]
+
 def classify_intent(user_message: str) -> Dict[str, Any]:
     t = user_message.lower()
 
@@ -25,7 +30,12 @@ def classify_intent(user_message: str) -> Dict[str, Any]:
         intents.append("tax")
     if any(k in t for k in ["what is", "explain", "difference between", "how does", "define"]):
         intents.append("qa")
-
+    if any(k in t for k in NEWS_KEYWORDS):
+        return {
+        "intent": "news",
+        "sub_intents": ["news"],
+        "required_agents": ["news"]
+    }
 
     # if no obvious, default to QA
     if not intents:
