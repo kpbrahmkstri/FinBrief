@@ -9,6 +9,7 @@ from pathlib import Path
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .state import FinanceState
+from .config import get_session_db_path
 from .agents.router_agent import classify_intent
 from .agents.rag_qa_agent import rag_qa
 from .agents.market_agent import market_intelligence
@@ -562,8 +563,7 @@ def build_graph():
     g.add_edge("append_assistant", END)
 
     # Checkpointer (persistent memory across sessions)
-    db_path = Path("src/data/session/finbrief_memory.sqlite")
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_path = get_session_db_path()
 
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     checkpointer = SqliteSaver(conn)

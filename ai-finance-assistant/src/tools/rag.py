@@ -31,13 +31,13 @@ def _parse_header_fields(text: str) -> tuple[str | None, str | None]:
     return title, category
 
 
-def _load_kb_documents(kb_dir: str) -> List:
+def _load_kb_documents(kb_dir) -> List:
     from pathlib import Path
     from langchain_core.documents import Document
 
-    kb_path = Path(kb_dir)
+    kb_path = Path(kb_dir) if not isinstance(kb_dir, Path) else kb_dir
     if not kb_path.exists():
-        raise FileNotFoundError(f"KB_DIR not found: {kb_dir}")
+        raise FileNotFoundError(f"KB_DIR not found: {kb_path}")
 
     docs = []
     for path in kb_path.glob("*.txt"):
@@ -56,7 +56,7 @@ def _load_kb_documents(kb_dir: str) -> List:
         )
 
     if not docs:
-        raise ValueError(f"No .txt files found in KB_DIR: {kb_dir}")
+        raise ValueError(f"No .txt files found in KB_DIR: {kb_path}")
 
     return docs
 
@@ -69,7 +69,8 @@ def build_or_load_faiss() -> FAISS:
     if _VECTORSTORE is not None:
         return _VECTORSTORE
 
-    index_dir = Path(settings.faiss_index_dir)
+    # Ensure settings.faiss_index_dir is a Path object
+    index_dir = Path(settings.faiss_index_dir) if not isinstance(settings.faiss_index_dir, Path) else settings.faiss_index_dir
     faiss_file = index_dir / "index.faiss"
     pkl_file = index_dir / "index.pkl"
 

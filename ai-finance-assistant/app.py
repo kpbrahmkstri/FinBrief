@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 from langchain_core.messages import HumanMessage
 
 from src.graph import build_graph
+from src.config import get_thread_id_file
 
-SESSION_FILE = Path("src/data/session/thread_id.txt")
-SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+SESSION_FILE = get_thread_id_file()
 
 def get_or_create_thread_id() -> str:
     if SESSION_FILE.exists():

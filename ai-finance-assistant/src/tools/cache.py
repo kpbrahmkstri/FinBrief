@@ -2,10 +2,12 @@ import sqlite3
 import json
 import time
 from typing import Any, Optional, Tuple
+from pathlib import Path
 
 class SQLiteTTLCache:
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self, db_path):
+        # Convert Path to string for sqlite3.connect
+        self.db_path = str(db_path) if isinstance(db_path, Path) else db_path
         self._init()
 
     def _init(self) -> None:
