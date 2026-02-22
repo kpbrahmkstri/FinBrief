@@ -33,6 +33,11 @@ class FinanceState(TypedDict, total=False):
     market_request: Optional[Dict[str, Any]]
     market_data: Optional[Dict[str, Any]]
 
+    market_answer: str
+    portfolio_answer: str
+    goals_answer: str
+    news_answer: str
+
     goals_request: Optional[Dict[str, Any]]
     goals_projection: Optional[Dict[str, Any]]
 

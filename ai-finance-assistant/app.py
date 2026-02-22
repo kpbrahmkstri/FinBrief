@@ -48,6 +48,8 @@ if "profile" not in st.session_state:
     st.session_state.profile = {"experience": "beginner", "risk_tolerance": "moderate"}
 if "memory" not in st.session_state:
     st.session_state.memory = []
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 if "portfolio" not in st.session_state:
     st.session_state.portfolio = [{"symbol": "AAPL", "quantity": 5}, {"symbol": "MSFT", "quantity": 3}]
 if "last_state" not in st.session_state:
@@ -59,19 +61,53 @@ tab_chat, tab_portfolio, tab_market, tab_goals, tab_news = st.tabs(
     ["Chat", "Portfolio", "Market", "Goals", "News"]
 )
 
-def run_graph(user_message: str, extra_state: dict):
-    state = {
+def run_graph(user_message: str, extra_state: dict | None = None) -> dict:
+    """
+    Invoke the LangGraph with a clean per-run UI output state (prevents leakage across tabs),
+    while still preserving persistent memory via SQLite checkpointer + thread_id.
+    """
+    # Append user message to conversation history
+    st.session_state.messages.append({"role": "user", "content": user_message})
+    
+    # Base state for every run
+    state: dict = {
         "user_message": user_message,
-        "messages": [{"role": "user", "content": user_message}],
-        "profile": st.session_state.profile,
-        "memory": st.session_state.memory,
-        **extra_state,
+
+        # ✅ Use full message history from session state (persists across calls)
+        "messages": st.session_state.messages,
+
+        # ✅ Clear tab outputs every run to prevent stale output showing in other tabs
+        "market_answer": "",
+        "portfolio_answer": "",
+        "goals_answer": "",
+        "news_answer": "",
+        "final_answer": "",
+
+        # ✅ Clear structured outputs too
+        "market_data": {},
+        "portfolio_metrics": {},
+        "goals_projection": {},
+        "news_summary": {},
+
+        # ✅ Clear common agent outputs
+        "rag_answer": "",
+        "tax_answer": "",
+        "debug": {},
     }
+
+    # Merge per-tab / per-request state overrides
+    if extra_state:
+        state.update(extra_state)
+
+    # Run graph with persistent thread id
     out = GRAPH.invoke(state, config={"configurable": {"thread_id": THREAD_ID}})
-    st.session_state.profile = out.get("profile", st.session_state.profile)
-    st.session_state.memory = out.get("memory", st.session_state.memory)
-    st.session_state.last_state = out
-    return out
+
+    # ✅ Update session state with returned messages and memory
+    out_dict = out if isinstance(out, dict) else dict(out)
+    st.session_state.messages = out_dict.get("messages", st.session_state.messages) or st.session_state.messages
+    st.session_state.memory = out_dict.get("memory", st.session_state.memory) or st.session_state.memory
+    
+    return out_dict
 
 with tab_chat:
     st.subheader("Chat")
@@ -81,21 +117,34 @@ with tab_chat:
         ["All", "Investing", "Tax", "Retirement", "Markets", "Risk", "Personal Finance"],
         index=0
     )
-    
-    user_message = st.text_input("Ask a finance question:", placeholder="Explain diversification, or price of AAPL, or plan a goal...")
+
+    user_message = st.text_input(
+        "Ask a finance question:",
+        placeholder="Explain diversification, or price of AAPL..."
+    )
+
+    show_memory = st.checkbox("Show conversation memory (debug)", value=False)
+
+    # Initialize storage
+    if "last_chat_out" not in st.session_state:
+        st.session_state.last_chat_out = None
 
     if st.button("Send", type="primary") and user_message:
         out = run_graph(
             user_message,
             extra_state={
                 "profile": {
-                    "qa_category": qa_category
+                    "qa_category": None if qa_category == "All" else qa_category
                 }
             }
         )
-        st.markdown(out.get("final_answer", ""))
+        st.session_state.last_chat_out = out
 
-        tax_cites = out.get("tax_citations", []) or []
+    # Always render last response if it exists
+    if st.session_state.last_chat_out:
+        st.markdown(st.session_state.last_chat_out.get("final_answer", ""))
+
+        tax_cites = st.session_state.last_chat_out.get("tax_citations", []) or []
         if tax_cites:
             st.markdown("**Sources used (Tax KB):**")
             for c in tax_cites:
@@ -104,12 +153,18 @@ with tab_chat:
                     f"{c.get('title','Untitled')} — {c.get('source','')}"
                 )
 
-    st.markdown("### Conversation Memory (last 6)")
-    for m in st.session_state.memory[-6:]:
-        if m["role"] == "user":
-            st.markdown(f"**🧑 You:** {m['content']}")
-        else:
-            st.markdown(f"**🤖 Assistant:** {m['content']}")
+    # ✅ Memory now works independently of button click
+    if show_memory and st.session_state.last_chat_out:
+        msgs = st.session_state.last_chat_out.get("messages", []) or []
+        st.markdown("### Conversation Memory (last 6)")
+        for m in msgs[-6:]:
+            role = m.get("role", "")
+            content = m.get("content", "")
+            if role == "user":
+                st.markdown(f"**🧑 You:** {content}")
+            else:
+                st.markdown(f"**🤖 Assistant:** {content}")
+
 
 with tab_portfolio:
     st.subheader("Portfolio")
@@ -121,13 +176,14 @@ with tab_portfolio:
         out = run_graph(
             "Analyze my portfolio allocation and diversification.",
             extra_state={
+                "forced_intent": "portfolio",   
                 "portfolio_input": st.session_state.portfolio,
                 "market_request": {"symbols": [x["symbol"] for x in st.session_state.portfolio]},
             },
         )
 
         pm = out.get("portfolio_metrics", {})
-        st.markdown(out.get("final_answer", ""))
+        st.markdown(out.get("portfolio_answer", "") or out.get("portfolio_narrative", ""))
 
         if pm and pm.get("positions"):
             pos = pd.DataFrame(pm["positions"])
@@ -189,11 +245,13 @@ with tab_market:
 
         out = run_graph(
             f"Get price quotes for {', '.join(symbols)}",
-            extra_state={"market_request": {"symbols": symbols}}
+            extra_state={
+                "forced_intent": "market",
+                "market_request": {"symbols": symbols},},
         )
 
         # Print text summary
-        st.markdown(out.get("final_answer", ""))
+        st.markdown(out.get("market_answer", ""))
 
         # Access structured market data
         market_data = out.get("market_data", {})
@@ -281,6 +339,7 @@ with tab_goals:
         out = run_graph(
             "Help me plan this financial goal.",
             extra_state={
+                "forced_intent": "market",
                 "goals_request": {
                     "target": target,
                     "monthly": monthly,
@@ -293,7 +352,7 @@ with tab_goals:
         )
 
         gp = out.get("goals_projection", {}) or {}
-        st.markdown(out.get("final_answer", ""))
+        st.markdown(out.get("goals_answer", ""))
 
         # Summary cards
         c1, c2, c3 = st.columns(3)
@@ -346,10 +405,12 @@ with tab_news:
     if st.button("Fetch & Summarize News"):
         out = run_graph(
             "Summarize the latest financial news.",
-            extra_state={"news_request": {"topic": topic, "limit": limit}},
+            extra_state={
+                "forced_intent": "news",
+                "news_request": {"topic": topic, "limit": limit}},
         )
 
-        st.markdown(out.get("final_answer", ""))
+        st.markdown(out.get("news_answer", ""))
 
         ns = out.get("news_summary", {}) or {}
         items = ns.get("items", []) or []

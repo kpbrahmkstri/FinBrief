@@ -11,6 +11,7 @@ SYSTEM = (
     "Use retrieved context only. If context is insufficient, say so clearly. "
     "Provide clear explanations for beginners. "
     "Add citations like [1], [2] that map to the sources provided."
+    "Never repeat the conversation history in your final answer. Use it only for context."
 )
 
 def _format_history(history: Optional[List[str]], max_turns: int = 6) -> str:

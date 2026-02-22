@@ -25,14 +25,29 @@ from .agents.tax_agent import tax_education_answer
 # ---------------------------
 
 def node_router(state: FinanceState) -> FinanceState:
+    # ✅ If UI already decided the intent, honor it and skip classification
+    forced = state.get("forced_intent")
+    if forced:
+        state["intent"] = forced
+        state["sub_intents"] = []
+        state["required_agents"] = [forced]
+        state["debug"] = {"router": {"forced_intent": forced}}
+        return state
+
     user_message = state.get("user_message", "") or ""
     out = classify_intent(user_message)
-    state["intent"] = out["intent"]
-    state["sub_intents"] = out["sub_intents"]
-    state["required_agents"] = out["required_agents"]
+
+    state["intent"] = out.get("intent", "qa")
+    state["sub_intents"] = out.get("sub_intents", [])
+    state["required_agents"] = out.get("required_agents", [])
+
+    # If multiple agents required → collaboration
+    req = state["required_agents"] or []
+    if len(req) >= 2:
+        state["intent"] = "mixed"
+
     state["debug"] = {"router": out}
     return state
-
 
 def node_memory_update(state: FinanceState) -> FinanceState:
     profile = state.get("profile", {}) or {}
@@ -123,6 +138,105 @@ def node_market(state: FinanceState) -> FinanceState:
 
     state["market_request"] = {"symbols": symbols}
     state["market_data"] = market_intelligence(symbols)["quotes"]
+    state["market_answer"] = state.get("final_answer", "") or state.get("market_answer", "")
+    return state
+
+def node_planner(state: FinanceState) -> FinanceState:
+    """
+    Build a deterministic multi-agent execution plan using router output.
+    """
+    req = state.get("required_agents") or []
+
+    # Map your router's agent names → graph node steps
+    # Adjust strings if your classify_intent uses different labels.
+    mapping = {
+        "finance_qa": "rag",
+        "rag": "rag",
+        "tax": "tax",
+        "tax_education": "tax",
+        "goal_planning": "goals",
+        "goals": "goals",
+        "news": "news",
+        "news_synth": "news",
+    }
+
+    # Build plan in a good order:
+    # RAG first for explanation, then goals/tax/news
+    ordered = []
+    for k in req:
+        step = mapping.get(k, None)
+        if step and step not in ordered:
+            ordered.append(step)
+
+    # If router gave unknown labels, default to rag
+    if not ordered:
+        ordered = ["rag"]
+
+    # Ensure rag appears first if present
+    if "rag" in ordered:
+        ordered = ["rag"] + [x for x in ordered if x != "rag"]
+
+    state["plan"] = ordered
+    return state
+
+def node_execute_plan(state: FinanceState) -> FinanceState:
+    plan = state.get("plan") or ["rag"]
+
+    # Defaults to prevent crashes if user didn't fill UI fields
+    state.setdefault("news_request", {"topic": "All", "limit": 8})
+    state.setdefault(
+        "goals_request",
+        {
+            "target": 50000,
+            "monthly": 300,
+            "years": 10,
+            "current": 0,
+            "expected_return": 0.06,
+            "inflation": 0.02,
+        },
+    )
+
+    for step in plan:
+        if step == "rag":
+            state = node_rag(state)
+        elif step == "tax":
+            state = node_tax(state)
+        elif step == "goals":
+            state = node_goals(state)
+        elif step == "news":
+            state = node_news(state)
+
+    return state
+
+def node_compose_collab(state: FinanceState) -> FinanceState:
+    parts = []
+    parts.append("⚠️ **Education-only:** General information, not personalized financial or tax advice.\n")
+
+    rag = (state.get("rag_answer") or "").strip()
+    if rag:
+        parts.append("## 📘 Finance Explanation\n" + rag)
+
+    gp = state.get("goals_projection") or {}
+    if gp:
+        ia = gp.get("inflation_adjusted_target")
+        rm = gp.get("required_monthly_contribution")
+        gap = gp.get("gap")
+        parts.append(
+            "## 🎯 Goal Planning Snapshot\n"
+            f"- Inflation-adjusted target: **{f'${ia:,.0f}' if isinstance(ia,(int,float)) else 'N/A'}**\n"
+            f"- Required monthly contribution: **{f'${rm:,.0f}' if isinstance(rm,(int,float)) else 'N/A'}**\n"
+            f"- Gap: **{f'${gap:,.0f}' if isinstance(gap,(int,float)) else 'N/A'}**\n"
+        )
+
+    tax = (state.get("tax_answer") or "").strip()
+    if tax:
+        parts.append("## 🧾 Tax Notes\n" + tax)
+
+    ns = state.get("news_summary") or {}
+    if ns.get("summary"):
+        parts.append("## 🗞️ News Digest\n" + ns["summary"])
+
+    state["final_answer"] = "\n\n---\n\n".join(parts).strip()
     return state
 
 def node_portfolio(state: FinanceState) -> FinanceState:
@@ -133,11 +247,18 @@ def node_portfolio(state: FinanceState) -> FinanceState:
     quotes = state.get("market_data") or {}
 
     res = portfolio_analysis(holdings, quotes=quotes)
-    state["portfolio_metrics"] = res["metrics"]
+    metrics = res.get("metrics", {}) or {}
+    narrative = res.get("narrative", "") or ""
+
+    state["portfolio_metrics"] = metrics
+    state["portfolio_narrative"] = narrative
 
     # keep narrative in debug (optional)
     dbg = state.get("debug") or {}
     dbg["portfolio_narrative"] = res.get("narrative", "")
+    state["portfolio_answer"] = state["portfolio_narrative"]
+    state["portfolio_answer"] = state.get("portfolio_narrative", "") or ""
+    state["portfolio_narrative"] = narrative
     state["debug"] = dbg
     return state
 
@@ -167,6 +288,19 @@ def node_goals(state: FinanceState) -> FinanceState:
     state["goals_projection"] = result.get("goal_metrics", {})
     state["final_answer"] = result.get("narrative", "")
 
+    gp = state.get("goals_projection") or {}
+    rm = gp.get("required_monthly_contribution")
+    gap = gp.get("gap")
+    ia = gp.get("inflation_adjusted_target")
+
+    state["goals_answer"] = (
+        "⚠️ Education-only: Not personalized financial advice.\n\n"
+        "## 🎯 Goal Projection Summary\n"
+        f"- Inflation-adjusted target: **{f'${ia:,.0f}' if isinstance(ia,(int,float)) else 'N/A'}**\n"
+        f"- Required monthly contribution: **{f'${rm:,.0f}' if isinstance(rm,(int,float)) else 'N/A'}**\n"
+        f"- Gap: **{f'${gap:,.0f}' if isinstance(gap,(int,float)) else 'N/A'}**\n"
+    )
+
     return state
 
 
@@ -187,6 +321,8 @@ def node_news(state: FinanceState) -> FinanceState:
 
     # Put the synthesized narrative into final_answer
     state["final_answer"] = res.get("summary", "")
+    ns = state.get("news_summary") or {}
+    state["news_answer"] = ns.get("summary", "") or ""
     return state
 
 def node_tax(state: FinanceState) -> FinanceState:
@@ -275,7 +411,8 @@ def node_compose(state: FinanceState) -> FinanceState:
                 parts.append(f"- **{sym}**: ${lp_str} (prev close: ${pc_str}, source: {src})")
             
     # --- Portfolio ---
-    if state.get("portfolio_metrics"):
+    # Only show portfolio summary when portfolio was explicitly analyzed
+    if state.get("intent") in ("portfolio",) and state.get("portfolio_metrics"):
         pm = state["portfolio_metrics"]
         parts.append("### 🧾 Portfolio Summary")
         parts.append(f"- Total value: **${pm['total_value']:,.2f}**")
@@ -348,13 +485,15 @@ def route_next(state: FinanceState) -> str:
         return "tax"
     if intent == "mixed":
         # simplest deterministic behavior: start with RAG; you can extend later
-        return "rag"
+        return "planner"
+    if intent == "collab":
+        return "planner"
     return "rag"
 
 
-# ---------------------------
-# Graph builder (NO fan-out)
-# ---------------------------
+# --------------
+# Graph builder 
+# --------------
 
 def build_graph():
     """
@@ -378,6 +517,10 @@ def build_graph():
     g.add_node("news", node_news)
     g.add_node("tax", node_tax)
 
+    g.add_node("planner", node_planner)
+    g.add_node("execute_plan", node_execute_plan)
+    g.add_node("compose_collab", node_compose_collab)
+
     g.add_node("compose", node_compose)
 
     # ✅ new: append assistant answer to messages for persistence
@@ -394,6 +537,7 @@ def build_graph():
         "market_then_portfolio": "market_then_portfolio",
         "goals": "goals",
         "news": "news",
+        "planner": "planner",
         "tax": "tax",
     })
 
@@ -404,6 +548,10 @@ def build_graph():
 
     g.add_edge("market_then_portfolio", "portfolio")
     g.add_edge("portfolio", "compose")
+
+    g.add_edge("planner", "execute_plan")
+    g.add_edge("execute_plan", "compose_collab")
+    g.add_edge("compose_collab", "append_assistant")
 
     g.add_edge("goals", "compose")
     g.add_edge("news", "compose")
