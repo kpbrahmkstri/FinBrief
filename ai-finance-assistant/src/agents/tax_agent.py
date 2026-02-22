@@ -1,19 +1,17 @@
-# src/agents/tax_agent.py
 from __future__ import annotations
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
 from ..tools.rag import get_rag_retriever
 
-
 SYSTEM = (
-    "You are a Tax Education Agent. You provide educational explanations only. "
-    "Do NOT provide personalized tax advice. Do NOT guess rates/thresholds. "
-    "If the retrieved context doesn't contain enough detail, say so and suggest what to verify.\n\n"
-    "Always use citations like [1], [2] tied to the sources list.\n\n"
+    "You are a Tax Education Agent. Provide education-only explanations. "
+    "Do NOT provide personalized tax advice. "
+    "Use retrieved context only. If context is insufficient, say so clearly. "
+    "Add citations like [1], [2] that map to the sources provided.\n\n"
     "Answer format:\n"
     "### Education-only note\n"
     "### Direct answer\n"
@@ -23,8 +21,16 @@ SYSTEM = (
     "### What to do next (education-only)\n"
 )
 
-def tax_qa(user_message: str) -> Dict[str, Any]:
-    # Hard filter to Tax category only
+def _format_history(history: Optional[List[str]], max_turns: int = 6) -> str:
+    if not history:
+        return ""
+    return "\n".join(history[-max_turns:])
+
+def tax_qa(
+    user_message: str,
+    history: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    # Hard filter to Tax category
     retriever = get_rag_retriever(category="Tax")
     docs = retriever.get_relevant_documents(user_message)
 
@@ -37,17 +43,16 @@ def tax_qa(user_message: str) -> Dict[str, Any]:
         src = meta.get("source", "unknown")
         cat = meta.get("category", "Uncategorized")
 
-        # enforce category guard (extra safety)
+        # extra safety
         if str(cat).lower() != "tax":
             continue
 
         snippet = (d.page_content or "")[:900]
-        context_parts.append(
-            f"[{i}] Title: {title}\nCategory: {cat}\nSource: {src}\n{snippet}"
-        )
+        context_parts.append(f"[{i}] Title: {title}\nCategory: {cat}\nSource: {src}\n{snippet}")
         citations.append({"id": str(i), "title": title, "category": cat, "source": src})
 
     context = "\n\n".join(context_parts) if context_parts else "(no retrieved context)"
+    history_block = _format_history(history)
 
     llm = ChatOpenAI(
         model=settings.llm_model,
@@ -56,7 +61,9 @@ def tax_qa(user_message: str) -> Dict[str, Any]:
     )
 
     prompt = (
-        f"User question: {user_message}\n\n"
+        f"Conversation so far (most recent turns):\n"
+        f"{history_block if history_block else '(no prior context)'}\n\n"
+        f"User question (current): {user_message}\n\n"
         f"Retrieved context (Tax only):\n{context}\n\n"
         "If the user asks for a comparison (e.g., Roth vs Traditional vs Taxable), include a small markdown table.\n"
         "If the question depends on location, filing status, income thresholds, or current-year rules and those are "
@@ -64,8 +71,8 @@ def tax_qa(user_message: str) -> Dict[str, Any]:
     )
 
     answer = llm.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=prompt)]).content
-
     return {"answer": answer, "citations": citations}
 
-def tax_education_answer(user_message: str):
-    return tax_qa(user_message)
+
+def tax_education_answer(user_message: str, history: Optional[List[str]] = None) -> Dict[str, Any]:
+    return tax_qa(user_message=user_message, history=history)

@@ -2,9 +2,26 @@ import streamlit as st
 import os
 os.environ["STREAMLIT_FILE_WATCHER_TYPE"] = "none"
 import pandas as pd
+import os, uuid
+from pathlib import Path
 import matplotlib.pyplot as plt
+from langchain_core.messages import HumanMessage
 
 from src.graph import build_graph
+
+SESSION_FILE = Path("src/data/session/thread_id.txt")
+SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def get_or_create_thread_id() -> str:
+    if SESSION_FILE.exists():
+        tid = SESSION_FILE.read_text().strip()
+        if tid:
+            return tid
+    tid = str(uuid.uuid4())
+    SESSION_FILE.write_text(tid)
+    return tid
+
+THREAD_ID = get_or_create_thread_id()
 
 st.set_page_config(page_title="FinBrief", layout="wide")
 
@@ -45,11 +62,12 @@ tab_chat, tab_portfolio, tab_market, tab_goals, tab_news = st.tabs(
 def run_graph(user_message: str, extra_state: dict):
     state = {
         "user_message": user_message,
+        "messages": [{"role": "user", "content": user_message}],
         "profile": st.session_state.profile,
         "memory": st.session_state.memory,
         **extra_state,
     }
-    out = GRAPH.invoke(state)
+    out = GRAPH.invoke(state, config={"configurable": {"thread_id": THREAD_ID}})
     st.session_state.profile = out.get("profile", st.session_state.profile)
     st.session_state.memory = out.get("memory", st.session_state.memory)
     st.session_state.last_state = out

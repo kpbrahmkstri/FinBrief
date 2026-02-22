@@ -4,6 +4,9 @@ from __future__ import annotations
 from typing import Any, Dict, List
 from langgraph.graph import StateGraph, END
 from matplotlib import category
+import sqlite3
+from pathlib import Path
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .state import FinanceState
 from .agents.router_agent import classify_intent
@@ -46,7 +49,30 @@ def node_memory_update(state: FinanceState) -> FinanceState:
 
 def node_rag(state: FinanceState) -> FinanceState:
     category = (state.get("profile") or {}).get("qa_category")  
-    res = rag_qa(state.get("user_message", "") or "", category=category)
+    
+    msgs = state.get("messages") or []
+    history = []
+    # Convert LangChain messages into simple strings
+    for m in msgs[-10:]:
+        # Handle both dict-like and LangChain message objects
+        if isinstance(m, dict):
+            role = (m.get("role") or "").lower()
+            content = m.get("content") or ""
+        else:
+            # LangChain message objects have .type and .content attributes
+            role = getattr(m, "type", "").lower()
+            content = getattr(m, "content", "") or ""
+        
+        if not content:
+            continue
+        history.append(f"{role}: {content}")
+
+    res = rag_qa(
+        state.get("user_message", "") or "",
+        category=category,
+        history=history,
+    )
+
     state["rag_answer"] = res["answer"]
     state["rag_citations"] = res["citations"]
     return state
@@ -167,7 +193,25 @@ def node_tax(state: FinanceState) -> FinanceState:
     from .agents.tax_agent import tax_qa
 
     user_message = state.get("user_message", "") or ""
-    res = tax_qa(user_message)
+    #res = tax_qa(user_message)
+    msgs = state.get("messages") or []
+    history = []
+    for m in msgs[-10:]:
+        role = getattr(m, "type", None) or m.__class__.__name__.lower()
+        content = getattr(m, "content", "")
+        if not content:
+            continue
+        if "human" in role:
+            history.append(f"user: {content}")
+        elif "ai" in role:
+            history.append(f"assistant: {content}")
+        else:
+            history.append(f"{role}: {content}")
+
+    res = tax_education_answer(
+        state.get("user_message", "") or "",
+        history=history,
+    )
 
     state["tax_answer"] = res.get("answer", "")
     state["tax_citations"] = res.get("citations", [])
@@ -273,6 +317,11 @@ def node_compose(state: FinanceState) -> FinanceState:
     state["memory"] = append_memory(state.get("memory", []) or [], "assistant", answer)
     return state
 
+def node_append_assistant(state: FinanceState) -> FinanceState:
+    ans = state.get("final_answer") or ""
+    if ans:
+        state["messages"] = (state.get("messages") or []) + [{"role": "assistant", "content": ans}]
+    return state
 
 # ---------------------------
 # Routing logic
@@ -310,6 +359,7 @@ def route_next(state: FinanceState) -> str:
 def build_graph():
     """
     Deterministic StateGraph with no fan-out edges (prevents concurrent write errors).
+    Adds persistent multi-turn chat memory via SQLite checkpointer + JSON-safe messages.
     """
     g = StateGraph(FinanceState)
 
@@ -326,8 +376,12 @@ def build_graph():
     g.add_node("portfolio", node_portfolio)
     g.add_node("goals", node_goals)
     g.add_node("news", node_news)
-    g.add_node("compose", node_compose)
     g.add_node("tax", node_tax)
+
+    g.add_node("compose", node_compose)
+
+    # ✅ new: append assistant answer to messages for persistence
+    g.add_node("append_assistant", node_append_assistant)
 
     # Entry
     g.set_entry_point("memory_update")
@@ -355,7 +409,15 @@ def build_graph():
     g.add_edge("news", "compose")
     g.add_edge("tax", "compose")
 
-    # End
-    g.add_edge("compose", END)
+    # ✅ After composing, append assistant message, then end
+    g.add_edge("compose", "append_assistant")
+    g.add_edge("append_assistant", END)
 
-    return g.compile()
+    # Checkpointer (persistent memory across sessions)
+    db_path = Path("src/data/session/finbrief_memory.sqlite")
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(str(db_path), check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
+
+    return g.compile(checkpointer=checkpointer)

@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional
+
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -12,7 +13,18 @@ SYSTEM = (
     "Add citations like [1], [2] that map to the sources provided."
 )
 
-def rag_qa(user_message: str, category: Optional[str] = None) -> Dict[str, Any]:
+def _format_history(history: Optional[List[str]], max_turns: int = 6) -> str:
+    """history = list of strings like 'user: ...' / 'assistant: ...' """
+    if not history:
+        return ""
+    trimmed = history[-max_turns:]
+    return "\n".join(trimmed)
+
+def rag_qa(
+    user_message: str,
+    category: Optional[str] = None,
+    history: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     retriever = get_rag_retriever(category=category)
     docs = retriever.get_relevant_documents(user_message)
 
@@ -25,10 +37,13 @@ def rag_qa(user_message: str, category: Optional[str] = None) -> Dict[str, Any]:
         cat = meta.get("category", "Uncategorized")
 
         snippet = (d.page_content or "")[:900]
-        context_parts.append(f"[{i}] Title: {title}\nCategory: {cat}\nSource: {src}\n{snippet}")
+        context_parts.append(
+            f"[{i}] Title: {title}\nCategory: {cat}\nSource: {src}\n{snippet}"
+        )
         citations.append({"id": str(i), "title": title, "category": cat, "source": src})
 
     context = "\n\n".join(context_parts) if context_parts else "(no retrieved context)"
+    history_block = _format_history(history)
 
     llm = ChatOpenAI(
         model=settings.llm_model,
@@ -37,7 +52,9 @@ def rag_qa(user_message: str, category: Optional[str] = None) -> Dict[str, Any]:
     )
 
     prompt = (
-        f"User question: {user_message}\n\n"
+        f"Conversation so far (most recent turns):\n"
+        f"{history_block if history_block else '(no prior context)'}\n\n"
+        f"User question (current): {user_message}\n\n"
         f"Retrieved context:\n{context}\n\n"
         "Answer in this format:\n"
         "1) Direct answer (with citations like [1])\n"
@@ -46,5 +63,8 @@ def rag_qa(user_message: str, category: Optional[str] = None) -> Dict[str, Any]:
         "4) What to do next (education-only)\n"
     )
 
-    answer = llm.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=prompt)]).content
+    answer = llm.invoke(
+        [SystemMessage(content=SYSTEM), HumanMessage(content=prompt)]
+    ).content
+
     return {"answer": answer, "citations": citations}

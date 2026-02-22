@@ -1,11 +1,15 @@
 # src/state.py
-from typing import Any, Dict, List, Optional, TypedDict, Literal
+from typing import Annotated, Any, Dict, List, Optional, TypedDict, Literal
+#from langchain_core.messages import BaseMessage
 
 IntentType = Literal["qa", "portfolio", "market", "goals", "news", "tax", "mixed", "unknown"]
 
 class FinanceState(TypedDict, total=False):
     # raw user input
     user_message: str
+    final_answer: str
+
+    messages: List[Dict[str, str]]
 
     # router outputs
     intent: IntentType
